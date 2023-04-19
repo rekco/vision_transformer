@@ -105,3 +105,44 @@ class TransformerBlock(nn.Sequential):
             ))
         )
 
+
+class Patches2Im(nn.Module):
+    def __init__(self, im_size: int = 224, in_chs: int = 3, patch_size: int = 16, emb_size: int = 1024):
+        super(Patches2Im, self).__init__()
+        self.h = im_size // patch_size
+        self.w = im_size // patch_size
+        self.s1 = patch_size
+        self.s2 = patch_size
+        self.project = nn.Linear(emb_size, in_chs * patch_size ** 2)
+
+    def forward(self, x) -> Tensor:
+        x = self.project(x)
+        x = rearrange(x, 'b (h w) (s1 s2 c) -> b c (h s1) (w s2)', h=self.h, w=self.w, s1=self.s1, s2=self.s2)
+
+        return x
+
+
+class LocalFormer(nn.Module):
+    def __init__(self,
+                 in_chs: int = 3,
+                 im_size: int = 224,
+                 depth: int = 2,
+                 patch_size: int = 16,
+                 emb_size: int = 1024,
+                 num_heads: int = 8,
+                 att_drop_p: float = 0.,
+                 ffn_expansion: int = 4,
+                 ffn_drop_p: float = 0.):
+        super(LocalFormer, self).__init__()
+        self.depth = depth
+        self.position_embedding = DilatePositionEmbedding(in_chs, im_size, patch_size, emb_size)
+        self.transformer = TransformerBlock(emb_size, num_heads, att_drop_p, ffn_expansion, ffn_drop_p)
+        self.patch_im = Patches2Im(im_size, in_chs, patch_size, emb_size)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.position_embedding(x)
+        for i in range(self.depth):
+            x = self.transformer(x)
+        x = self.patch_im(x)
+
+        return x
