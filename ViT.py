@@ -134,15 +134,14 @@ class LocalFormer(nn.Module):
                  ffn_expansion: int = 4,
                  ffn_drop_p: float = 0.):
         super(LocalFormer, self).__init__()
-        self.depth = depth
         self.position_embedding = DilatePositionEmbedding(in_chs, im_size, patch_size, emb_size)
-        self.transformer = TransformerBlock(emb_size, num_heads, att_drop_p, ffn_expansion, ffn_drop_p)
+        self.transformers = nn.Sequential(*[TransformerBlock(emb_size, num_heads, att_drop_p, ffn_expansion, ffn_drop_p) for i in range(depth)])
         self.patch_im = Patches2Im(im_size, in_chs, patch_size, emb_size)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.position_embedding(x)
-        for i in range(self.depth):
-            x = self.transformer(x)
+        for transformer in self.transformers:
+            x = transformer(x)
         x = self.patch_im(x)
 
         return x
